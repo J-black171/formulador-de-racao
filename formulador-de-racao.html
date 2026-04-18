@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Formulação de Ração para Poedeiras - Rostagno (2017)</title>
+    <style>
+        * { box-sizing: border-box; font-family: system-ui, 'Segoe UI', Roboto, sans-serif; }
+        body { background: #eef5ea; margin: 0; padding: 16px; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); overflow: hidden; }
+        .header { background: #2c5e2e; color: white; padding: 20px 28px; }
+        .header h1 { margin: 0; font-size: 1.8rem; }
+        .header p { margin: 8px 0 0; opacity: 0.9; }
+        .content { padding: 24px; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 24px; background: #f4faf2; padding: 16px; border-radius: 28px; }
+        .fase-select { background: white; padding: 8px 16px; border-radius: 40px; display: flex; align-items: center; gap: 12px; }
+        select, button { background: #2c5e2e; color: white; border: none; padding: 8px 20px; border-radius: 40px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #1e4520; }
+        .ingredientes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 24px; max-height: 400px; overflow-y: auto; border: 1px solid #dde8dc; border-radius: 24px; padding: 12px; background: #fefef7; }
+        .ingrediente-card { background: white; border-radius: 20px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid #e2e8e0; }
+        .ingrediente-card label { display: flex; align-items: center; gap: 8px; font-weight: 500; flex: 1; }
+        .limites { font-size: 0.75rem; color: #4a6741; margin-left: 8px; cursor: pointer; text-decoration: underline; }
+        button.small { background: #85b87a; padding: 4px 12px; font-size: 0.7rem; }
+        .resultado { margin-top: 24px; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; background: white; border-radius: 20px; overflow: auto; display: block; }
+        th { background: #d9e8d5; padding: 10px; text-align: center; position: sticky; top: 0; }
+        td { padding: 8px; border-bottom: 1px solid #e2e8e0; text-align: center; }
+        .status-ok { color: #2c5e2e; font-weight: bold; }
+        .status-deficit { color: #c0392b; font-weight: bold; }
+        .status-excesso { color: #e67e22; font-weight: bold; }
+        .card { background: #fefce8; border-left: 6px solid #85b87a; padding: 16px; border-radius: 20px; margin: 16px 0; }
+        .card-custo { background: #e8f5e9; border-left-color: #2c5e2e; font-size: 1.1rem; }
+        .aviso { background: #fff3cd; border-left: 5px solid #ffc107; padding: 12px 18px; border-radius: 16px; }
+        footer { text-align: center; font-size: 0.75rem; color: #5a6e5a; padding: 16px; border-top: 1px solid #e2e8e0; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; border-radius: 28px; padding: 24px; width: 300px; }
+        .flex { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+        .destaque { font-weight: bold; font-size: 1.2rem; color: #1e4620; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🐔 Formulação de Rações para Poedeiras</h1>
+        <p>Base: Tabelas Brasileiras (Rostagno et al., 2017) | Otimização por Simplex</p>
+    </div>
+    <div class="content">
+        <div class="toolbar">
+            <div class="fase-select">
+                <span>📅 Fase de produção:</span>
+                <select id="faseSelect">
+                    <option value="pre">Pré-postura (16–18 sem)</option>
+                    <option value="inicial" selected>Postura Inicial (19–35 sem)</option>
+                    <option value="plena">Postura Plena (36–60 sem)</option>
+                    <option value="final">Postura Final (61–80 sem)</option>
+                </select>
+            </div>
+            <button id="formularBtn">🧪 FORMULAR RAÇÃO (mínimo custo)</button>
+        </div>
+
+        <div class="card">
+            <strong>📌 Ingredientes disponíveis</strong> (marque os que deseja usar; clique no percentual para ajustar limites de inclusão)
+        </div>
+        <div id="ingredientesList" class="ingredientes-grid"></div>
+
+        <div id="resultado" class="resultado">
+            <p style="color:#3c5e3a;">🔍 Clique no botão para calcular a ração de menor custo.</p>
+        </div>
+        <div class="aviso">
+            💡 Os limites mín/máx podem ser ajustados por ingrediente. O solver respeita esses limites, as exigências nutricionais da fase escolhida e a soma total de 100 kg.
+        </div>
+    </div>
+    <footer>Dados bromatológicos e exigências conforme Rostagno (2017) | Simplex implementado em JavaScript puro</footer>
+</div>
+
+<!-- Modal para editar limites -->
+<div id="modalLimites" class="modal">
+    <div class="modal-content">
+        <h3 id="modalIngrediente"></h3>
+        <label>Mínimo (%): <input type="number" id="modalMin" step="0.5" value="0"></label><br><br>
+        <label>Máximo (%): <input type="number" id="modalMax" step="0.5" value="100"></label><br>
+        <div class="flex">
+            <button id="modalSalvar">Salvar</button>
+            <button id="modalCancelar">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --------------------------------------------------------------
+    // 1. BASE DE DADOS (extraída da planilha)
+    // --------------------------------------------------------------
+    const ingredientesRaw = [
+        { nome:"Milho grão", MS:88, PB:8.26, EE:4.02, FB:1.94, MM:1.4, Ca:0.03, Ptotal:0.28, Pdisp:0.10, Na:0.02, Lis:0.24, Met:0.18, EMAn:3381, preco:0.85 },
+        { nome:"Milho grão moído", MS:88, PB:8.1, EE:3.9, FB:2, MM:1.35, Ca:0.03, Ptotal:0.27, Pdisp:0.09, Na:0.02, Lis:0.23, Met:0.17, EMAn:3350, preco:0.9 },
+        { nome:"Sorgo grão", MS:88, PB:9.4, EE:3.2, FB:2.3, MM:1.6, Ca:0.04, Ptotal:0.31, Pdisp:0.09, Na:0.02, Lis:0.22, Met:0.15, EMAn:3240, preco:0.8 },
+        { nome:"Farelo de trigo", MS:88, PB:15.6, EE:3.4, FB:8.26, MM:4.76, Ca:0.12, Ptotal:1.0, Pdisp:0.34, Na:0.06, Lis:0.56, Met:0.21, EMAn:1452, preco:0.75 },
+        { nome:"Triguilho (trigo cavado)", MS:88, PB:12, EE:2.8, FB:10, MM:3.8, Ca:0.09, Ptotal:0.8, Pdisp:0.25, Na:0.05, Lis:0.4, Met:0.18, EMAn:1320, preco:0.6 },
+        { nome:"Óleo de soja", MS:100, PB:0, EE:99, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:8790, preco:5.5 },
+        { nome:"Óleo de palma", MS:100, PB:0, EE:99, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:8600, preco:5.2 },
+        { nome:"Quirera de arroz", MS:88, PB:8.5, EE:1.5, FB:0.9, MM:3.5, Ca:0.08, Ptotal:0.38, Pdisp:0.12, Na:0.02, Lis:0.29, Met:0.2, EMAn:2900, preco:0.7 },
+        { nome:"Mandioca (raspa)", MS:88, PB:2.6, EE:0.5, FB:3.8, MM:3, Ca:0.2, Ptotal:0.07, Pdisp:0.03, Na:0.02, Lis:0.09, Met:0.03, EMAn:3060, preco:0.55 },
+        { nome:"Farelo de soja 45%", MS:88, PB:45, EE:1.5, FB:5.66, MM:6.49, Ca:0.33, Ptotal:0.64, Pdisp:0.23, Na:0.03, Lis:2.9, Met:0.66, EMAn:2258, preco:1.9 },
+        { nome:"Farelo de soja 48%", MS:88, PB:48, EE:1.2, FB:3.5, MM:6.8, Ca:0.35, Ptotal:0.66, Pdisp:0.24, Na:0.03, Lis:3.18, Met:0.7, EMAn:2310, preco:2.1 },
+        { nome:"Soja integral extrusada", MS:88, PB:36.5, EE:18.5, FB:4.8, MM:5.5, Ca:0.26, Ptotal:0.57, Pdisp:0.22, Na:0.02, Lis:2.24, Met:0.55, EMAn:3550, preco:2.4 },
+        { nome:"Farelo de canola", MS:88, PB:38, EE:8, FB:9.2, MM:6.5, Ca:0.63, Ptotal:1.03, Pdisp:0.35, Na:0.1, Lis:2.0, Met:0.67, EMAn:1606, preco:1.4 },
+        { nome:"Farelo de girassol desc.", MS:88, PB:34, EE:8.8, FB:17, MM:5.6, Ca:0.28, Ptotal:0.85, Pdisp:0.22, Na:0.06, Lis:1.0, Met:0.74, EMAn:1650, preco:1.2 },
+        { nome:"Glúten de milho 60%", MS:90, PB:60, EE:5, FB:1, MM:1.5, Ca:0.04, Ptotal:0.45, Pdisp:0.18, Na:0.02, Lis:0.98, Met:1.57, EMAn:3400, preco:3.5 },
+        { nome:"Farinha de carne e ossos 45%", MS:93, PB:45, EE:11, FB:0, MM:28, Ca:9.5, Ptotal:5.0, Pdisp:4.5, Na:0.6, Lis:2.6, Met:0.65, EMAn:1950, preco:2.2 },
+        { nome:"Farinha de carne e ossos 40%", MS:93, PB:40, EE:12, FB:0, MM:32, Ca:11, Ptotal:5.5, Pdisp:5.0, Na:0.7, Lis:2.1, Met:0.55, EMAn:1820, preco:1.9 },
+        { nome:"Farinha de peixe 60%", MS:92, PB:60, EE:9, FB:0, MM:20, Ca:4.5, Ptotal:2.9, Pdisp:2.6, Na:0.9, Lis:4.6, Met:1.71, EMAn:2980, preco:4.8 },
+        { nome:"Farinha de vísceras aves", MS:93, PB:54, EE:14, FB:0, MM:20, Ca:3.8, Ptotal:2.4, Pdisp:2.2, Na:0.6, Lis:3.3, Met:0.93, EMAn:2910, preco:2.5 },
+        { nome:"Calcário calcítico", MS:100, PB:0, EE:0, FB:0, MM:99, Ca:38, Ptotal:0.02, Pdisp:0.02, Na:0, Lis:0, Met:0, EMAn:0, preco:0.25 },
+        { nome:"Casca de ostra moída", MS:100, PB:0, EE:0, FB:0, MM:99, Ca:38.5, Ptotal:0.02, Pdisp:0.02, Na:0, Lis:0, Met:0, EMAn:0, preco:0.4 },
+        { nome:"Fosfato bicálcico", MS:100, PB:0, EE:0, FB:0, MM:97, Ca:22.5, Ptotal:18.5, Pdisp:16, Na:0, Lis:0, Met:0, EMAn:0, preco:3.5 },
+        { nome:"Fosfato monobicálcico", MS:100, PB:0, EE:0, FB:0, MM:97, Ca:16, Ptotal:21, Pdisp:19, Na:0, Lis:0, Met:0, EMAn:0, preco:3.2 },
+        { nome:"Sal comum (NaCl)", MS:100, PB:0, EE:0, FB:0, MM:99, Ca:0, Ptotal:0, Pdisp:0, Na:39.3, Lis:0, Met:0, EMAn:0, preco:0.6 },
+        { nome:"Bicarbonato de sódio", MS:100, PB:0, EE:0, FB:0, MM:99, Ca:0, Ptotal:0, Pdisp:0, Na:27, Lis:0, Met:0, EMAn:0, preco:1.8 },
+        { nome:"DL-Metionina 99%", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:99, EMAn:0, preco:22 },
+        { nome:"L-Lisina HCl 78%", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:78, Met:0, EMAn:0, preco:8.5 },
+        { nome:"L-Treonina 98%", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:12 },
+        { nome:"L-Triptofano 98%", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:55 },
+        { nome:"Premix vit.-min. poedeiras", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:18 },
+        { nome:"Cloreto de colina 60%", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:7 },
+        { nome:"Ácido fólico", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:40 },
+        { nome:"Fitase (500 FTU/g)", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:35 },
+        { nome:"Xilanase + Glucanase", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:30 },
+        { nome:"Anticoccidiano", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:28 },
+        { nome:"Pigmentante natural", MS:100, PB:0, EE:0, FB:0, MM:0, Ca:0, Ptotal:0, Pdisp:0, Na:0, Lis:0, Met:0, EMAn:0, preco:25 }
+    ];
+
+    // Limites padrão de inclusão (%)
+    const limitesDefault = {};
+    ingredientesRaw.forEach(ing => {
+        let maxPadrao = 100;
+        if (ing.nome.includes("Milho")) maxPadrao = 70;
+        else if (ing.nome.includes("Farelo de soja")) maxPadrao = 35;
+        else if (ing.nome.includes("Farelo de trigo")) maxPadrao = 20;
+        else if (ing.nome.includes("Calcário") || ing.nome.includes("Casca")) maxPadrao = 10;
+        else if (ing.nome.includes("Fosfato")) maxPadrao = 3;
+        else if (ing.nome.includes("Sal")) maxPadrao = 0.5;
+        else if (ing.nome.includes("Metionina") || ing.nome.includes("Lisina") || ing.nome.includes("Treonina") || ing.nome.includes("Triptofano")) maxPadrao = 0.5;
+        else if (ing.nome.includes("Premix")) maxPadrao = 0.5;
+        else if (ing.nome.includes("Óleo")) maxPadrao = 5;
+        else if (ing.nome.includes("Farinha")) maxPadrao = 8;
+        else maxPadrao = 10;
+        limitesDefault[ing.nome] = { min: 0, max: maxPadrao };
+    });
+
+    // Exigências por fase (Rostagno 2017)
+    const exigencias = {
+        pre: { EM:2750, PB:17.0, Ca:2.5, Pdisp:0.40, Na:0.18, Lis:0.85, Met:0.36, EE_min:2.0, FB_max:7.0 },
+        inicial: { EM:2800, PB:16.5, Ca:3.8, Pdisp:0.38, Na:0.18, Lis:0.82, Met:0.36, EE_min:2.0, FB_max:7.0 },
+        plena: { EM:2750, PB:16.0, Ca:4.0, Pdisp:0.35, Na:0.17, Lis:0.78, Met:0.34, EE_min:2.0, FB_max:7.0 },
+        final: { EM:2700, PB:15.0, Ca:4.2, Pdisp:0.32, Na:0.17, Lis:0.73, Met:0.32, EE_min:2.0, FB_max:7.0 }
+    };
+
+    // --------------------------------------------------------------
+    // 2. SIMPLEX (implementação direta)
+    // --------------------------------------------------------------
+    class Simplex {
+        constructor(c, A, b, sense = "min", constraints = []) {
+            this.c = c; this.A = A; this.b = b; this.sense = sense; this.constraints = constraints;
+            this.numVars = c.length; this.numCons = A.length;
+        }
+        solve() {
+            let m = this.numCons, n = this.numVars;
+            let numSlack=0, numExcess=0, numArtificial=0;
+            for(let i=0;i<m;i++) {
+                let t = this.constraints[i];
+                if(t==='<=') numSlack++;
+                else if(t==='>=') { numExcess++; numArtificial++; }
+                else if(t==='=') numArtificial++;
+            }
+            let totalVars = n + numSlack + numExcess + numArtificial;
+            let tableau = Array(m+1).fill().map(()=>Array(totalVars+1).fill(0));
+            for(let i=0;i<m;i++) {
+                for(let j=0;j<n;j++) tableau[i][j] = this.A[i][j];
+                tableau[i][totalVars] = this.b[i];
+            }
+            let slackIdx=n, excessIdx=n+numSlack, artIdx=n+numSlack+numExcess;
+            let slackCnt=0, excessCnt=0, artCnt=0;
+            for(let i=0;i<m;i++) {
+                let t = this.constraints[i];
+                if(t==='<=') tableau[i][slackIdx+slackCnt++] = 1;
+                else if(t==='>=') { tableau[i][excessIdx+excessCnt++] = -1; tableau[i][artIdx+artCnt++] = 1; }
+                else if(t==='=') tableau[i][artIdx+artCnt++] = 1;
+            }
+            let objCoef = [...this.c];
+            if(this.sense==='max') objCoef = objCoef.map(x=>-x);
+            for(let j=0;j<n;j++) tableau[m][j] = -objCoef[j];
+            const BIG_M = 1e6;
+            if(numArtificial>0) {
+                for(let i=0;i<m;i++) {
+                    let t = this.constraints[i];
+                    if(t==='>=' || t==='=') {
+                        for(let a=0;a<numArtificial;a++) {
+                            if(Math.abs(tableau[i][artIdx+a]-1)<1e-8) tableau[m][artIdx+a] = BIG_M;
+                        }
+                    }
+                }
+            }
+            let iter=0, maxIter=1000;
+            while(iter<maxIter) {
+                let pivotCol=-1, minVal=0;
+                for(let j=0;j<totalVars;j++) if(tableau[m][j] < minVal) { minVal = tableau[m][j]; pivotCol=j; }
+                if(pivotCol===-1) break;
+                let pivotRow=-1, minRatio=Infinity;
+                for(let i=0;i<m;i++) {
+                    if(tableau[i][pivotCol] > 1e-9) {
+                        let ratio = tableau[i][totalVars] / tableau[i][pivotCol];
+                        if(ratio < minRatio) { minRatio = ratio; pivotRow=i; }
+                    }
+                }
+                if(pivotRow===-1) return { feasible: false };
+                let pivotVal = tableau[pivotRow][pivotCol];
+                for(let j=0;j<=totalVars;j++) tableau[pivotRow][j] /= pivotVal;
+                for(let i=0;i<=m;i++) {
+                    if(i!==pivotRow && Math.abs(tableau[i][pivotCol])>1e-9) {
+                        let factor = tableau[i][pivotCol];
+                        for(let j=0;j<=totalVars;j++) tableau[i][j] -= factor*tableau[pivotRow][j];
+                    }
+                }
+                iter++;
+            }
+            let solution = new Array(n).fill(0);
+            for(let j=0;j<n;j++) {
+                let basicRow=-1, cnt=0;
+                for(let i=0;i<m;i++) {
+                    if(Math.abs(tableau[i][j]-1)<1e-8) { basicRow=i; cnt++; }
+                    else if(Math.abs(tableau[i][j])>1e-8) { cnt=-1; break; }
+                }
+                if(cnt===1 && basicRow!==-1) solution[j] = tableau[basicRow][totalVars];
+            }
+            let optimalValue = tableau[m][totalVars];
+            if(this.sense==='max') optimalValue = -optimalValue;
+            return { feasible: true, solution, value: optimalValue };
+        }
+    }
+
+    // --------------------------------------------------------------
+    // 3. ESTADO DA INTERFACE
+    // --------------------------------------------------------------
+    let ingredientesAtivos = {};   // { nome: bool }
+    let limitesAtuais = {};        // { nome: {min, max} }
+    let currentIngredientForModal = null;
+
+    function carregarEstadoInicial() {
+        ingredientesRaw.forEach(ing => {
+            ingredientesAtivos[ing.nome] = true;
+            limitesAtuais[ing.nome] = { ...limitesDefault[ing.nome] };
+        });
+    }
+    carregarEstadoInicial();
+
+    function renderIngredientes() {
+        const container = document.getElementById('ingredientesList');
+        container.innerHTML = '';
+        ingredientesRaw.forEach(ing => {
+            const card = document.createElement('div');
+            card.className = 'ingrediente-card';
+            const checked = ingredientesAtivos[ing.nome] ? 'checked' : '';
+            card.innerHTML = `
+                <label>
+                    <input type="checkbox" data-nome="${ing.nome}" ${checked}> 
+                    <strong>${ing.nome}</strong> (${ing.preco.toFixed(2)} R$/kg)
+                </label>
+                <span class="limites" data-nome="${ing.nome}">${limitesAtuais[ing.nome].min}% - ${limitesAtuais[ing.nome].max}%</span>
+            `;
+            container.appendChild(card);
+        });
+        document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const nome = e.target.getAttribute('data-nome');
+                ingredientesAtivos[nome] = e.target.checked;
+            });
+        });
+        document.querySelectorAll('.limites').forEach(span => {
+            span.addEventListener('click', (e) => {
+                const nome = e.target.getAttribute('data-nome');
+                abrirModalLimites(nome);
+            });
+        });
+    }
+
+    function abrirModalLimites(nome) {
+        currentIngredientForModal = nome;
+        document.getElementById('modalIngrediente').innerText = nome;
+        document.getElementById('modalMin').value = limitesAtuais[nome].min;
+        document.getElementById('modalMax').value = limitesAtuais[nome].max;
+        document.getElementById('modalLimites').style.display = 'flex';
+    }
+
+    document.getElementById('modalSalvar').addEventListener('click', () => {
+        if(currentIngredientForModal) {
+            const min = parseFloat(document.getElementById('modalMin').value);
+            const max = parseFloat(document.getElementById('modalMax').value);
+            if(!isNaN(min) && !isNaN(max) && min<=max) {
+                limitesAtuais[currentIngredientForModal].min = min;
+                limitesAtuais[currentIngredientForModal].max = max;
+            }
+        }
+        document.getElementById('modalLimites').style.display = 'none';
+        renderIngredientes();
+    });
+    document.getElementById('modalCancelar').addEventListener('click', () => {
+        document.getElementById('modalLimites').style.display = 'none';
+    });
+
+    function construirModelo() {
+        const fase = document.getElementById('faseSelect').value;
+        const exg = exigencias[fase];
+        const ativos = ingredientesRaw.filter(ing => ingredientesAtivos[ing.nome]);
+        const nomes = ativos.map(ing => ing.nome);
+        const custo = ativos.map(ing => ing.preco);
+        const numIng = ativos.length;
+        let A = [];
+        let b = [];
+        let constraints = [];
+        // Soma = 100
+        let somaRow = new Array(numIng).fill(1);
+        A.push(somaRow); b.push(100); constraints.push('=');
+        // Limites individuais
+        for(let i=0;i<numIng;i++) {
+            let rowMin = new Array(numIng).fill(0); rowMin[i]=1;
+            A.push(rowMin); b.push(limitesAtuais[ativos[i].nome].min); constraints.push('>=');
+            let rowMax = new Array(numIng).fill(0); rowMax[i]=1;
+            A.push(rowMax); b.push(limitesAtuais[ativos[i].nome].max); constraints.push('<=');
+        }
+        // Nutrientes
+        A.push(ativos.map(ing => ing.EMAn)); b.push(exg.EM); constraints.push('>=');
+        A.push(ativos.map(ing => ing.PB)); b.push(exg.PB); constraints.push('>=');
+        A.push(ativos.map(ing => ing.Ca)); b.push(exg.Ca); constraints.push('>=');
+        A.push(ativos.map(ing => ing.Pdisp)); b.push(exg.Pdisp); constraints.push('>=');
+        A.push(ativos.map(ing => ing.Na)); b.push(exg.Na); constraints.push('>=');
+        A.push(ativos.map(ing => ing.Lis)); b.push(exg.Lis); constraints.push('>=');
+        A.push(ativos.map(ing => ing.Met)); b.push(exg.Met); constraints.push('>=');
+        A.push(ativos.map(ing => ing.EE)); b.push(exg.EE_min); constraints.push('>=');
+        A.push(ativos.map(ing => ing.FB)); b.push(exg.FB_max); constraints.push('<=');
+        return { c: custo, A, b, constraints, ativos };
+    }
+
+    function formatarResultado(solucao, ativos, custoTotal, exigenciasFase, faseNome) {
+        // custoTotal é o custo para 100 kg
+        const custoPorKg = custoTotal / 100;
+        const custoPorTon = custoTotal * 10;
+        let html = `
+            <div class="card card-custo">
+                <strong>💰 CUSTO DA RAÇÃO (formulação para 100 kg)</strong><br>
+                <span class="destaque">R$ ${custoPorKg.toFixed(2)} / kg</span><br>
+                R$ ${custoTotal.toFixed(2)} / 100 kg (saco)<br>
+                R$ ${custoPorTon.toFixed(2)} / tonelada
+            </div>
+        `;
+        html += `<div class="card"><strong>📋 Composição da ração (kg e % para 100 kg)</strong></div>`;
+        html += `<td><thead><tr><th>Ingrediente</th><th>kg (por 100kg)</th><th>% da ração</th></tr></thead><tbody>`;
+        for(let i=0;i<ativos.length;i++) {
+            if(solucao[i] > 0.001) {
+                html += `<tr><td><strong>${ativos[i].nome}</strong></td><td>${solucao[i].toFixed(2)} kg</td><td>${solucao[i].toFixed(2)}%</td></tr>`;
+            }
+        }
+        html += `</tbody></table>`;
+        // Calcular perfil
+        let perfil = { EM:0, PB:0, Ca:0, Pdisp:0, Na:0, Lis:0, Met:0, EE:0, FB:0 };
+        for(let i=0;i<ativos.length;i++) {
+            perfil.EM += ativos[i].EMAn * solucao[i];
+            perfil.PB += ativos[i].PB * solucao[i];
+            perfil.Ca += ativos[i].Ca * solucao[i];
+            perfil.Pdisp += ativos[i].Pdisp * solucao[i];
+            perfil.Na += ativos[i].Na * solucao[i];
+            perfil.Lis += ativos[i].Lis * solucao[i];
+            perfil.Met += ativos[i].Met * solucao[i];
+            perfil.EE += ativos[i].EE * solucao[i];
+            perfil.FB += ativos[i].FB * solucao[i];
+        }
+        html += `<div class="card"><strong>🥩 Perfil nutricional atingido (por kg de ração)</strong></div>`;
+        html += `<table><thead><tr><th>Nutriente</th><th>Valor</th><th>Exigência mín.</th><th>Exigência máx.</th><th>Status</th></tr></thead><tbody>`;
+        const checks = [
+            {nome:"EM (kcal/kg)", val:perfil.EM, min:exigenciasFase.EM, max:null},
+            {nome:"PB (%)", val:perfil.PB, min:exigenciasFase.PB, max:null},
+            {nome:"Cálcio (%)", val:perfil.Ca, min:exigenciasFase.Ca, max:null},
+            {nome:"P disponível (%)", val:perfil.Pdisp, min:exigenciasFase.Pdisp, max:null},
+            {nome:"Sódio (%)", val:perfil.Na, min:exigenciasFase.Na, max:null},
+            {nome:"Lisina total (%)", val:perfil.Lis, min:exigenciasFase.Lis, max:null},
+            {nome:"Metionina total (%)", val:perfil.Met, min:exigenciasFase.Met, max:null},
+            {nome:"Extrato Etéreo (%)", val:perfil.EE, min:exigenciasFase.EE_min, max:null},
+            {nome:"Fibra Bruta (%)", val:perfil.FB, min:null, max:exigenciasFase.FB_max}
+        ];
+        for(let c of checks) {
+            let status = "";
+            let statusClass = "";
+            if(c.min !== null && c.val < c.min) { status = "❌ DÉFICIT"; statusClass = "status-deficit"; }
+            else if(c.max !== null && c.val > c.max) { status = "❌ EXCESSO"; statusClass = "status-excesso"; }
+            else { status = "✅ OK"; statusClass = "status-ok"; }
+            let minStr = (c.min!==null) ? c.min.toFixed(2) : "-";
+            let maxStr = (c.max!==null) ? c.max.toFixed(2) : "-";
+            html += `<tr><td>${c.nome}</td><td><strong>${c.val.toFixed(2)}</strong></td><td>${minStr}</td><td>${maxStr}</td><td class="${statusClass}">${status}</td></tr>`;
+        }
+        html += `</tbody></table>`;
+        return html;
+    }
+
+    function resolver() {
+        const fase = document.getElementById('faseSelect').value;
+        const exg = exigencias[fase];
+        const modelo = construirModelo();
+        if(modelo.ativos.length === 0) {
+            document.getElementById('resultado').innerHTML = `<div class="card" style="background:#ffe6e6;">❌ Selecione pelo menos um ingrediente.</div>`;
+            return;
+        }
+        const simplex = new Simplex(modelo.c, modelo.A, modelo.b, "min", modelo.constraints);
+        const resultado = simplex.solve();
+        if(!resultado.feasible) {
+            document.getElementById('resultado').innerHTML = `<div class="card" style="background:#ffe6e6;">❌ Problema inviável. Relaxe limites ou exigências.</div>`;
+            return;
+        }
+        const sol = resultado.solution;
+        const custoTotal = resultado.value;
+        const html = formatarResultado(sol, modelo.ativos, custoTotal, exg, fase);
+        document.getElementById('resultado').innerHTML = html;
+    }
+
+    renderIngredientes();
+    document.getElementById('formularBtn').addEventListener('click', resolver);
+</script>
+</body>
+</html>
